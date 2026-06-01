@@ -7,7 +7,7 @@ import {
 
 import { socket } from "./socket/socket";
 
-import { P2PClient } from "./webrtc/P2PClient";
+import { p2pClient } from "./webrtc/P2PClient";
 
 function App() {
   const isOffererRef = useRef(false);
@@ -22,10 +22,6 @@ function App() {
 
   const [hasCreatedOffer, setHasCreatedOffer] =
     useState(false);
-
-  const [p2pClient] = useState(
-    () => new P2PClient()
-  );
 
   const createOffer = async () => {
     if (hasCreatedOffer) {
@@ -95,6 +91,10 @@ function App() {
       answer: RTCSessionDescriptionInit;
       senderId: string;
     }) => {
+      console.log(
+        "RAW ANSWER EVENT RECEIVED"
+      );
+
       if (senderId === socket.id) {
         console.log(
           "Ignoring own answer"

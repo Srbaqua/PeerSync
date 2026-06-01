@@ -1,5 +1,5 @@
 
-export class P2PClient {
+class P2PClient {
   private peer: RTCPeerConnection;
 
   constructor() {
@@ -77,4 +77,6 @@ export class P2PClient {
     console.log("Remote Answer Set");
   }
 }
+
+export const p2pClient = new P2PClient();
 
