@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 import { socket } from "./socket/socket";
-//revert
-
+import { P2PClient } from "./webrtc/P2PClient";
 function App() {
   const [roomId, setRoomId] = useState("");
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState<string[]>([]);
-
+  const [p2pClient] = useState(() => new P2PClient());
+  
   useEffect(() => {
     socket.on("receive-message", (msg: string) => {
       setMessages((prev) => [...prev, msg]);
@@ -15,6 +15,7 @@ function App() {
     socket.on("user-joined", (id: string) => {
       console.log("User joined:", id);
     });
+    console.log(p2pClient.getPeer());
 
     return () => {
       socket.off("receive-message");
@@ -24,14 +25,13 @@ function App() {
 
   const joinRoom = () => {
     if (!roomId) return;
-      console.log("Joining room:", roomId);
 
     socket.emit("join-room", roomId);
   };
 
   const sendMessage = () => {
     if (!message) return;
-  console.log("Sending:", message);
+
     socket.emit("send-message", {
       roomId,
       message,
@@ -41,6 +41,7 @@ function App() {
 
     setMessage("");
   };
+
 
   return (
     <div style={{ padding: "2rem" }}>
