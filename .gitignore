@@ -1,4 +1,25 @@
-/server/node_modules
-/server/dist
-/server/package-lock.json
-node_modules
+# Dependencies
+node_modules/
+
+# Build output
+/server/dist/
+/client/dist/
+/client/.vite/
+
+# Environment files
+.env
+.env.*
+
+# Logs
+*.log
+
+# TypeScript
+*.tsbuildinfo
+
+# IDEs
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
