@@ -1,3 +1,4 @@
+
 import express from "express";
 import http from "http";
 import { Server } from "socket.io";
@@ -34,12 +35,40 @@ io.on("connection", (socket) => {
     socket.to(roomId).emit("receive-message", message);
   });
 
+  socket.on(
+    "offer",
+    ({ roomId, offer, senderId }) => {
+      console.log("Offer received");
+
+      socket.to(roomId).emit("offer", {
+        offer,
+        senderId,
+      });
+    }
+  );
+
+  socket.on(
+    "answer",
+    ({ roomId, answer, senderId }) => {
+      console.log("Answer received");
+
+      socket.to(roomId).emit("answer", {
+        answer,
+        senderId,
+      });
+
+      console.log("Answer forwarded to room");
+    }
+  );
+
   socket.on("disconnect", () => {
     console.log("Disconnected:", socket.id);
   });
 });
 
-const PORT   = 5000
-server.listen(PORT,()=>{
-    console.log(`Server is running on port ${PORT}`);
+const PORT = 5000;
+
+server.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}`);
 });
+
