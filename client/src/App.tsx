@@ -18,6 +18,8 @@ import ChatBox from "./components/ChatBox";
 
 import TransferPanel from "./components/TransferPanel";
 
+import Toast from "./components/Toast";
+
 function App() {
   const receivedChunks = useRef<
     ArrayBuffer[]
@@ -26,6 +28,9 @@ function App() {
   const receivedBytes = useRef(0);
 
   const expectedFileSize = useRef(0);
+
+  const transferStartTime =
+    useRef(0);
 
   const [roomId, setRoomId] =
     useState("");
@@ -38,6 +43,9 @@ function App() {
 
   const [status, setStatus] =
     useState("Disconnected");
+
+  const [toast, setToast] =
+    useState("");
 
   const [joinedRoom, setJoinedRoom] =
     useState(false);
@@ -57,6 +65,22 @@ function App() {
   const [receivingFileName, setReceivingFileName] =
     useState("");
 
+  const [transferSpeed, setTransferSpeed] =
+    useState("");
+
+  const [transferHistory, setTransferHistory] =
+    useState<string[]>([]);
+
+  const showToast = (
+    text: string
+  ) => {
+    setToast(text);
+
+    setTimeout(() => {
+      setToast("");
+    }, 2500);
+  };
+
   const createOffer = async () => {
     if (hasCreatedOffer) return;
 
@@ -74,6 +98,10 @@ function App() {
       offer,
       senderId: socket.id,
     });
+
+    showToast(
+      "Offer created successfully"
+    );
 
     setStatus("Offer sent");
   };
@@ -93,6 +121,10 @@ function App() {
       answer,
       targetId,
     });
+
+    showToast(
+      "Peer connection accepted"
+    );
 
     setStatus("Answer sent");
   };
@@ -149,7 +181,14 @@ function App() {
         data.fileName
       );
 
+      transferStartTime.current =
+        Date.now();
+
       setStatus(
+        `Receiving ${data.fileName}`
+      );
+
+      showToast(
         `Receiving ${data.fileName}`
       );
     }
@@ -174,8 +213,19 @@ function App() {
 
       a.click();
 
+      setTransferHistory(
+        (prev) => [
+          `Received: ${receivingFileName}`,
+          ...prev,
+        ]
+      );
+
       setStatus(
         "File received successfully"
+      );
+
+      showToast(
+        "File transfer completed"
       );
     }
   };
@@ -189,12 +239,25 @@ function App() {
         setStatus(
           `Peer: ${peer.connectionState}`
         );
+
+        if (
+          peer.connectionState ===
+          "connected"
+        ) {
+          showToast(
+            "P2P Connection Established"
+          );
+        }
       };
 
     socket.on(
       "user-joined",
       () => {
         setStatus(
+          "Peer joined room"
+        );
+
+        showToast(
           "Peer joined room"
         );
       }
@@ -211,8 +274,8 @@ function App() {
         )
           return;
 
-        setStatus(
-          "Offer received"
+        showToast(
+          "Incoming connection request"
         );
 
         await createAnswer(
@@ -225,10 +288,6 @@ function App() {
     socket.on(
       "answer",
       async ({ answer }) => {
-        setStatus(
-          "Answer received"
-        );
-
         await p2pClient.handleAnswer(
           answer
         );
@@ -265,6 +324,10 @@ function App() {
     setStatus(
       `Joined room ${roomId}`
     );
+
+    showToast(
+      `Joined room ${roomId}`
+    );
   };
 
   const sendMessage = () => {
@@ -287,6 +350,9 @@ function App() {
     file: File
   ) => {
     setSendingFileName(file.name);
+
+    transferStartTime.current =
+      Date.now();
 
     const chunkSize = 16 * 1024;
 
@@ -320,11 +386,39 @@ function App() {
       setSendingProgress(
         Math.min(progress, 100)
       );
+
+      const elapsedSeconds =
+        (Date.now() -
+          transferStartTime.current) /
+        1000;
+
+      const speedMbps =
+        (
+          offset /
+          1024 /
+          1024 /
+          elapsedSeconds
+        ).toFixed(2);
+
+      setTransferSpeed(
+        `${speedMbps} MB/s`
+      );
     }
 
     p2pClient.sendStructuredMessage({
       type: "file-complete",
     });
+
+    setTransferHistory(
+      (prev) => [
+        `Sent: ${file.name}`,
+        ...prev,
+      ]
+    );
+
+    showToast(
+      "File sent successfully"
+    );
 
     setStatus(
       "File sent successfully"
@@ -333,6 +427,8 @@ function App() {
 
   return (
     <div className="app-container">
+      <Toast text={toast} />
+
       <h1 className="title">
         WebRTC File Transfer
       </h1>
@@ -365,6 +461,35 @@ function App() {
           receivingFileName
         }
       />
+
+      <div className="card">
+        <h2>Transfer Metrics</h2>
+
+        <p>
+          Speed:
+          {" "}
+          {transferSpeed || "0 MB/s"}
+        </p>
+      </div>
+
+      <div className="card">
+        <h2>Transfer History</h2>
+
+        {transferHistory.length ===
+        0 ? (
+          <p>
+            No transfers yet
+          </p>
+        ) : (
+          transferHistory.map(
+            (item, index) => (
+              <p key={index}>
+                {item}
+              </p>
+            )
+          )
+        )}
+      </div>
 
       <ChatBox
         message={message}
