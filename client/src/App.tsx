@@ -293,7 +293,8 @@ function App() {
         offset + chunkSize
       );
 
-      p2pClient.sendBinaryChunk(chunk);
+     await p2pClient.waitForBufferLow(); 
+     p2pClient.sendBinaryChunk(chunk);
 
       offset += chunkSize;
     }

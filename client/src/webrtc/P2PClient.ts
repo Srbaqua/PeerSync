@@ -158,6 +158,27 @@ class P2PClient {
     }
   }
 
+public async waitForBufferLow() {
+  if (!this.dataChannel) return;
+
+  const threshold = 256 * 1024;
+
+  while (
+    this.dataChannel.bufferedAmount >
+    threshold
+  ) {
+    console.log(
+      "Waiting for buffer to drain...",
+      this.dataChannel
+        .bufferedAmount
+    );
+
+    await new Promise((resolve) =>
+      setTimeout(resolve, 50)
+    );
+  }
+}
+
   public sendMessage(message: string) {
     if (
       this.dataChannel?.readyState ===
