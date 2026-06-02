@@ -16,6 +16,10 @@ function App() {
     ArrayBuffer[]
   >([]);
 
+  const receivedBytes = useRef(0);
+
+  const expectedFileSize = useRef(0);
+
   const [roomId, setRoomId] =
     useState("");
 
@@ -27,6 +31,18 @@ function App() {
 
   const [hasCreatedOffer, setHasCreatedOffer] =
     useState(false);
+
+  const [sendingProgress, setSendingProgress] =
+    useState(0);
+
+  const [receivingProgress, setReceivingProgress] =
+    useState(0);
+
+  const [receivingFileName, setReceivingFileName] =
+    useState("");
+
+  const [sendingFileName, setSendingFileName] =
+    useState("");
 
   const createOffer = async () => {
     if (hasCreatedOffer) {
@@ -89,6 +105,18 @@ function App() {
         data
       );
 
+      receivedBytes.current +=
+        data.byteLength;
+
+      const progress =
+        (receivedBytes.current /
+          expectedFileSize.current) *
+        100;
+
+      setReceivingProgress(
+        Math.min(progress, 100)
+      );
+
       return;
     }
 
@@ -106,6 +134,17 @@ function App() {
       );
 
       receivedChunks.current = [];
+
+      receivedBytes.current = 0;
+
+      expectedFileSize.current =
+        data.fileSize;
+
+      setReceivingProgress(0);
+
+      setReceivingFileName(
+        data.fileName
+      );
     }
 
     if (
@@ -127,9 +166,15 @@ function App() {
 
       a.href = url;
 
-      a.download = "received-file";
+      a.download =
+        receivingFileName ||
+        "received-file";
 
       a.click();
+
+      setTimeout(() => {
+        setReceivingProgress(0);
+      }, 2000);
     }
   };
 
@@ -276,6 +321,10 @@ function App() {
   ) => {
     const chunkSize = 16 * 1024;
 
+    setSendingFileName(file.name);
+
+    setSendingProgress(0);
+
     p2pClient.sendStructuredMessage({
       type: "file-meta",
       fileName: file.name,
@@ -293,10 +342,19 @@ function App() {
         offset + chunkSize
       );
 
-     await p2pClient.waitForBufferLow(); 
-     p2pClient.sendBinaryChunk(chunk);
+      await p2pClient.waitForBufferLow();
+
+      p2pClient.sendBinaryChunk(chunk);
 
       offset += chunkSize;
+
+      const progress =
+        (offset / buffer.byteLength) *
+        100;
+
+      setSendingProgress(
+        Math.min(progress, 100)
+      );
     }
 
     p2pClient.sendStructuredMessage({
@@ -306,6 +364,10 @@ function App() {
     console.log(
       "File transfer completed"
     );
+
+    setTimeout(() => {
+      setSendingProgress(0);
+    }, 2000);
   };
 
   return (
@@ -358,6 +420,54 @@ function App() {
           }
         }}
       />
+
+      <div style={{ marginTop: "20px" }}>
+        <h3>Transfer Status</h3>
+
+        {sendingProgress > 0 && (
+          <div>
+            <p>
+              Sending:
+              {" "}
+              {sendingFileName}
+            </p>
+
+            <progress
+              value={sendingProgress}
+              max="100"
+            />
+
+            <p>
+              {sendingProgress.toFixed(
+                1
+              )}
+              %
+            </p>
+          </div>
+        )}
+
+        {receivingProgress > 0 && (
+          <div>
+            <p>
+              Receiving:
+              {" "}
+              {receivingFileName}
+            </p>
+
+            <progress
+              value={receivingProgress}
+              max="100"
+            />
+
+            <p>
+              {receivingProgress.toFixed(
+                1
+              )}
+              %
+            </p>
+          </div>
+        )}
+      </div>
 
       <div>
         <h3>Messages</h3>
