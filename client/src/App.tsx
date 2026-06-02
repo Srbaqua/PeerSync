@@ -44,12 +44,24 @@ function App() {
   const [sendingFileName, setSendingFileName] =
     useState("");
 
+  const [status, setStatus] =
+    useState("Disconnected");
+
+  const [joinedRoom, setJoinedRoom] =
+    useState(false);
+
   const createOffer = async () => {
     if (hasCreatedOffer) {
-      console.log("Offer already created");
+      setStatus(
+        "Offer already created"
+      );
 
       return;
     }
+
+    setStatus(
+      "Creating WebRTC offer..."
+    );
 
     setHasCreatedOffer(true);
 
@@ -63,12 +75,20 @@ function App() {
       offer,
       senderId: socket.id,
     });
+
+    setStatus(
+      "Offer created and sent"
+    );
   };
 
   const createAnswer = async (
     offer: RTCSessionDescriptionInit,
     targetId: string
   ) => {
+    setStatus(
+      "Received offer. Creating answer..."
+    );
+
     const answer =
       await p2pClient.createAnswer(
         offer
@@ -80,6 +100,10 @@ function App() {
       answer,
       targetId,
     });
+
+    setStatus(
+      "Answer sent successfully"
+    );
   };
 
   p2pClient.onIceCandidate = (
@@ -133,6 +157,10 @@ function App() {
         data.fileName
       );
 
+      setStatus(
+        `Receiving file: ${data.fileName}`
+      );
+
       receivedChunks.current = [];
 
       receivedBytes.current = 0;
@@ -152,6 +180,10 @@ function App() {
     ) {
       console.log(
         "File transfer complete"
+      );
+
+      setStatus(
+        "File transfer completed"
       );
 
       const blob = new Blob(
@@ -179,6 +211,24 @@ function App() {
   };
 
   useEffect(() => {
+    const peer =
+      p2pClient.getPeer();
+
+    peer.onconnectionstatechange =
+      () => {
+        const state =
+          peer.connectionState;
+
+        console.log(
+          "Connection State:",
+          state
+        );
+
+        setStatus(
+          `Peer Connection: ${state}`
+        );
+      };
+
     const handleOffer = async ({
       offer,
       senderId,
@@ -187,15 +237,15 @@ function App() {
       senderId: string;
     }) => {
       if (senderId === socket.id) {
-        console.log(
-          "Ignoring own offer"
-        );
-
         return;
       }
 
       console.log(
         "Offer received in frontend"
+      );
+
+      setStatus(
+        "Incoming connection request..."
       );
 
       await createAnswer(
@@ -213,8 +263,8 @@ function App() {
         "RAW ANSWER EVENT RECEIVED"
       );
 
-      console.log(
-        "Answer received in frontend"
+      setStatus(
+        "Answer received. Establishing connection..."
       );
 
       await p2pClient.handleAnswer(
@@ -233,10 +283,6 @@ function App() {
         if (senderId === socket.id) {
           return;
         }
-
-        console.log(
-          "ICE Candidate received in frontend"
-        );
 
         await p2pClient.addIceCandidate(
           candidate
@@ -271,6 +317,10 @@ function App() {
           "User joined:",
           id
         );
+
+        setStatus(
+          `Peer joined room`
+        );
       }
     );
 
@@ -298,6 +348,12 @@ function App() {
     if (!roomId) return;
 
     socket.emit("join-room", roomId);
+
+    setJoinedRoom(true);
+
+    setStatus(
+      `Joined room: ${roomId}`
+    );
   };
 
   const sendMessage = () => {
@@ -324,6 +380,10 @@ function App() {
     setSendingFileName(file.name);
 
     setSendingProgress(0);
+
+    setStatus(
+      `Sending file: ${file.name}`
+    );
 
     p2pClient.sendStructuredMessage({
       type: "file-meta",
@@ -361,8 +421,8 @@ function App() {
       type: "file-complete",
     });
 
-    console.log(
-      "File transfer completed"
+    setStatus(
+      "File sent successfully"
     );
 
     setTimeout(() => {
@@ -374,6 +434,8 @@ function App() {
     <div style={{ padding: "2rem" }}>
       <h1>WebRTC File Transfer</h1>
 
+      <h3>Status: {status}</h3>
+
       <input
         type="text"
         placeholder="Room ID"
@@ -384,7 +446,9 @@ function App() {
       />
 
       <button onClick={joinRoom}>
-        Join Room
+        {joinedRoom
+          ? "Room Joined"
+          : "Join Room"}
       </button>
 
       <hr />
@@ -399,7 +463,9 @@ function App() {
       />
 
       <button onClick={createOffer}>
-        Create Offer
+        {hasCreatedOffer
+          ? "Offer Created"
+          : "Create Offer"}
       </button>
 
       <button onClick={sendMessage}>
@@ -483,3 +549,4 @@ function App() {
 }
 
 export default App;
+
