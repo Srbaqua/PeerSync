@@ -16,59 +16,122 @@ const io = new Server(server, {
   },
 });
 
+const rooms: Record<
+  string,
+  string[]
+> = {};
+
 io.on("connection", (socket) => {
   console.log("User Connected:", socket.id);
 
   socket.on("join-room", (roomId: string) => {
-    console.log("JOIN ROOM EVENT RECEIVED:", roomId);
+    console.log(
+      "JOIN ROOM EVENT RECEIVED:",
+      roomId
+    );
 
     socket.join(roomId);
 
-    console.log(`${socket.id} joined ${roomId}`);
-
-    socket.to(roomId).emit("user-joined", socket.id);
-  });
-
-  socket.on("send-message", ({ roomId, message }) => {
-    console.log("MESSAGE EVENT:", roomId, message);
-
-    socket.to(roomId).emit("receive-message", message);
-  });
-
-  socket.on(
-    "offer",
-    ({ roomId, offer, senderId }) => {
-      console.log("Offer received");
-
-      socket.to(roomId).emit("offer", {
-        offer,
-        senderId,
-      });
+    if (!rooms[roomId]) {
+      rooms[roomId] = [];
     }
-  );
+
+    if (
+      !rooms[roomId].includes(socket.id)
+    ) {
+      rooms[roomId].push(socket.id);
+    }
+
+    console.log(
+      `${socket.id} joined ${roomId}`
+    );
+
+    socket
+      .to(roomId)
+      .emit("user-joined", socket.id);
+  });
+
+socket.on( "offer", ({ roomId, offer, senderId, }) => { console.log("Offer received"); socket.to(roomId).emit( "offer", { offer, senderId, } ); } );
+
+
+socket.on(
+  "answer",
+  ({
+    answer,
+    targetId,
+  }) => {
+    console.log(
+      "Answer received"
+    );
+
+    io.to(targetId).emit(
+      "answer",
+      {
+        answer,
+      }
+    );
+
+    console.log(
+      "Answer forwarded directly"
+    );
+  }
+);
+
 
   socket.on(
-    "answer",
-    ({ roomId, answer, senderId }) => {
-      console.log("Answer received");
+    "ice-candidate",
+    ({
+      roomId,
+      candidate,
+      senderId,
+    }) => {
+      console.log(
+        "ICE Candidate received"
+      );
 
-      socket.to(roomId).emit("answer", {
-        answer,
-        senderId,
-      });
+      const targetPeer =
+        rooms[roomId]?.find(
+          (id) => id !== senderId
+        );
 
-      console.log("Answer forwarded to room");
+      if (!targetPeer) {
+        console.log(
+          "No target peer found for ICE"
+        );
+
+        return;
+      }
+
+      io.to(targetPeer).emit(
+        "ice-candidate",
+        {
+          candidate,
+          senderId,
+        }
+      );
     }
   );
 
   socket.on("disconnect", () => {
-    console.log("Disconnected:", socket.id);
+    console.log(
+      "Disconnected:",
+      socket.id
+    );
+
+    for (const roomId in rooms) {
+      rooms[roomId] = rooms[
+        roomId
+      ].filter(
+        (id) => id !== socket.id
+      );
+    }
   });
 });
 
 const PORT = 5000;
 
 server.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
+  console.log(
+    `Server is running on port ${PORT}`
+  );
 });
-

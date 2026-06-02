@@ -44,114 +44,168 @@ function App() {
     });
   };
 
-  const createAnswer = async (
-    offer: RTCSessionDescriptionInit
+
+const createAnswer = async (
+  offer: RTCSessionDescriptionInit,
+  targetId: string
+) => {
+  const answer =
+    await p2pClient.createAnswer(
+      offer
+    );
+
+  if (!answer) return;
+
+  socket.emit("answer", {
+    answer,
+    targetId,
+  });
+};
+
+  p2pClient.onIceCandidate = (
+    candidate
   ) => {
-    const answer =
-      await p2pClient.createAnswer(
-        offer
-      );
-
-    if (!answer) return;
-
-    socket.emit("answer", {
+    socket.emit("ice-candidate", {
       roomId,
-      answer,
+      candidate,
       senderId: socket.id,
     });
   };
 
-  useEffect(() => {
-    const handleOffer = async ({
-      offer,
+  p2pClient.onMessage = (
+    message
+  ) => {
+    setMessages((prev) => [
+      ...prev,
+      `Peer: ${message}`,
+    ]);
+  };
+
+
+useEffect(() => {
+  const handleOffer = async ({
+    offer,
+    senderId,
+  }: {
+    offer: RTCSessionDescriptionInit;
+    senderId: string;
+  }) => {
+    if (senderId === socket.id) {
+      console.log(
+        "Ignoring own offer"
+      );
+
+      return;
+    }
+
+    console.log(
+      "Offer received in frontend"
+    );
+
+    await createAnswer(offer,senderId);
+  };
+
+  const handleAnswer = async ({
+    answer,
+    senderId,
+  }: {
+    answer: RTCSessionDescriptionInit;
+    senderId: string;
+  }) => {
+    if (senderId === socket.id) {
+      console.log(
+        "Ignoring own answer"
+      );
+
+      return;
+    }
+
+    console.log(
+      "RAW ANSWER EVENT RECEIVED"
+    );
+
+    console.log(
+      "Answer received in frontend"
+    );
+
+    await p2pClient.handleAnswer(
+      answer
+    );
+  };
+
+  const handleIceCandidate =
+    async ({
+      candidate,
       senderId,
     }: {
-      offer: RTCSessionDescriptionInit;
+      candidate: RTCIceCandidateInit;
       senderId: string;
     }) => {
       if (senderId === socket.id) {
-        console.log(
-          "Ignoring own offer"
-        );
-
         return;
       }
 
       console.log(
-        "Offer received in frontend"
+        "ICE Candidate received in frontend"
       );
 
-      await createAnswer(offer);
-    };
-
-    const handleAnswer = async ({
-      answer,
-      senderId,
-    }: {
-      answer: RTCSessionDescriptionInit;
-      senderId: string;
-    }) => {
-      console.log(
-        "RAW ANSWER EVENT RECEIVED"
-      );
-
-      if (senderId === socket.id) {
-        console.log(
-          "Ignoring own answer"
-        );
-
-        return;
-      }
-
-      console.log(
-        "Answer received in frontend"
-      );
-
-      await p2pClient.handleAnswer(
-        answer
+      await p2pClient.addIceCandidate(
+        candidate
       );
     };
 
-    socket.on("offer", handleOffer);
+  socket.removeAllListeners(
+    "offer"
+  );
 
-    socket.on("answer", handleAnswer);
+  socket.removeAllListeners(
+    "answer"
+  );
 
-    socket.on(
-      "receive-message",
-      (msg: string) => {
-        setMessages((prev) => [
-          ...prev,
-          msg,
-        ]);
-      }
+  socket.removeAllListeners(
+    "ice-candidate"
+  );
+
+  socket.on("offer", handleOffer);
+
+  socket.on("answer", handleAnswer);
+
+  socket.on(
+    "ice-candidate",
+    handleIceCandidate
+  );
+
+  socket.on(
+    "user-joined",
+    (id: string) => {
+      console.log(
+        "User joined:",
+        id
+      );
+    }
+  );
+
+  return () => {
+    socket.off(
+      "offer",
+      handleOffer
     );
 
-    socket.on(
-      "user-joined",
-      (id: string) => {
-        console.log(
-          "User joined:",
-          id
-        );
-      }
+    socket.off(
+      "answer",
+      handleAnswer
     );
 
-    return () => {
-      socket.off(
-        "offer",
-        handleOffer
-      );
+    socket.off(
+      "ice-candidate",
+      handleIceCandidate
+    );
 
-      socket.off(
-        "answer",
-        handleAnswer
-      );
+    socket.off("user-joined");
+  };
+}, []);
 
-      socket.off("receive-message");
 
-      socket.off("user-joined");
-    };
-  }, []);
 
   const joinRoom = () => {
     if (!roomId) return;
@@ -162,10 +216,7 @@ function App() {
   const sendMessage = () => {
     if (!message) return;
 
-    socket.emit("send-message", {
-      roomId,
-      message,
-    });
+    p2pClient.sendMessage(message);
 
     setMessages((prev) => [
       ...prev,
