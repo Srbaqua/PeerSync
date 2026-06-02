@@ -70,7 +70,7 @@ function App() {
 
   const [transferHistory, setTransferHistory] =
     useState<string[]>([]);
-
+const cancelTransferRef = useRef(false);
   const showToast = (
     text: string
   ) => {
@@ -346,9 +346,23 @@ function App() {
     setMessage("");
   };
 
+const cancelTransfer = () => {
+  cancelTransferRef.current = true;
+
+  setStatus("Transfer cancelled");
+
+  showToast("Transfer cancelled");
+
+  setSendingProgress(0);
+};
+
+
   const sendFile = async (
     file: File
   ) => {
+
+cancelTransferRef.current = false;
+
     setSendingFileName(file.name);
 
     transferStartTime.current =
@@ -374,7 +388,7 @@ function App() {
       );
 
       await p2pClient.waitForBufferLow();
-
+if ( cancelTransferRef.current ) { break; }
       p2pClient.sendBinaryChunk(chunk);
 
       offset += chunkSize;
@@ -446,21 +460,29 @@ function App() {
         }
       />
 
-      <TransferPanel
-        sendFile={sendFile}
-        sendingProgress={
-          sendingProgress
-        }
-        receivingProgress={
-          receivingProgress
-        }
-        sendingFileName={
-          sendingFileName
-        }
-        receivingFileName={
-          receivingFileName
-        }
-      />
+      
+<TransferPanel
+  sendFile={sendFile}
+  sendingProgress={
+    sendingProgress
+  }
+  receivingProgress={
+    receivingProgress
+  }
+  sendingFileName={
+    sendingFileName
+  }
+  receivingFileName={
+    receivingFileName
+  }
+  transferSpeed={
+    transferSpeed
+  }
+  cancelTransfer={
+    cancelTransfer
+  }
+/>
+
 
       <div className="card">
         <h2>Transfer Metrics</h2>
