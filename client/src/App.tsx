@@ -1,17 +1,24 @@
-
 import {
   useEffect,
   useRef,
   useState,
 } from "react";
 
+import "./App.css";
+
 import { socket } from "./socket/socket";
 
 import { p2pClient } from "./webrtc/P2PClient";
 
-function App() {
-  const isOffererRef = useRef(false);
+import StatusBar from "./components/StatusBar";
 
+import RoomControls from "./components/RoomControls";
+
+import ChatBox from "./components/ChatBox";
+
+import TransferPanel from "./components/TransferPanel";
+
+function App() {
   const receivedChunks = useRef<
     ArrayBuffer[]
   >([]);
@@ -29,6 +36,12 @@ function App() {
   const [messages, setMessages] =
     useState<string[]>([]);
 
+  const [status, setStatus] =
+    useState("Disconnected");
+
+  const [joinedRoom, setJoinedRoom] =
+    useState(false);
+
   const [hasCreatedOffer, setHasCreatedOffer] =
     useState(false);
 
@@ -38,34 +51,20 @@ function App() {
   const [receivingProgress, setReceivingProgress] =
     useState(0);
 
-  const [receivingFileName, setReceivingFileName] =
-    useState("");
-
   const [sendingFileName, setSendingFileName] =
     useState("");
 
-  const [status, setStatus] =
-    useState("Disconnected");
-
-  const [joinedRoom, setJoinedRoom] =
-    useState(false);
+  const [receivingFileName, setReceivingFileName] =
+    useState("");
 
   const createOffer = async () => {
-    if (hasCreatedOffer) {
-      setStatus(
-        "Offer already created"
-      );
-
-      return;
-    }
-
-    setStatus(
-      "Creating WebRTC offer..."
-    );
+    if (hasCreatedOffer) return;
 
     setHasCreatedOffer(true);
 
-    isOffererRef.current = true;
+    setStatus(
+      "Creating offer..."
+    );
 
     const offer =
       await p2pClient.createOffer();
@@ -76,19 +75,13 @@ function App() {
       senderId: socket.id,
     });
 
-    setStatus(
-      "Offer created and sent"
-    );
+    setStatus("Offer sent");
   };
 
   const createAnswer = async (
     offer: RTCSessionDescriptionInit,
     targetId: string
   ) => {
-    setStatus(
-      "Received offer. Creating answer..."
-    );
-
     const answer =
       await p2pClient.createAnswer(
         offer
@@ -101,9 +94,7 @@ function App() {
       targetId,
     });
 
-    setStatus(
-      "Answer sent successfully"
-    );
+    setStatus("Answer sent");
   };
 
   p2pClient.onIceCandidate = (
@@ -120,11 +111,6 @@ function App() {
     data
   ) => {
     if (data instanceof ArrayBuffer) {
-      console.log(
-        "Received binary chunk:",
-        data.byteLength
-      );
-
       receivedChunks.current.push(
         data
       );
@@ -152,15 +138,6 @@ function App() {
     }
 
     if (data.type === "file-meta") {
-      console.log(
-        "Receiving file:",
-        data.fileName
-      );
-
-      setStatus(
-        `Receiving file: ${data.fileName}`
-      );
-
       receivedChunks.current = [];
 
       receivedBytes.current = 0;
@@ -168,24 +145,18 @@ function App() {
       expectedFileSize.current =
         data.fileSize;
 
-      setReceivingProgress(0);
-
       setReceivingFileName(
         data.fileName
+      );
+
+      setStatus(
+        `Receiving ${data.fileName}`
       );
     }
 
     if (
       data.type === "file-complete"
     ) {
-      console.log(
-        "File transfer complete"
-      );
-
-      setStatus(
-        "File transfer completed"
-      );
-
       const blob = new Blob(
         receivedChunks.current
       );
@@ -199,14 +170,13 @@ function App() {
       a.href = url;
 
       a.download =
-        receivingFileName ||
-        "received-file";
+        receivingFileName;
 
       a.click();
 
-      setTimeout(() => {
-        setReceivingProgress(0);
-      }, 2000);
+      setStatus(
+        "File received successfully"
+      );
     }
   };
 
@@ -216,143 +186,84 @@ function App() {
 
     peer.onconnectionstatechange =
       () => {
-        const state =
-          peer.connectionState;
-
-        console.log(
-          "Connection State:",
-          state
-        );
-
         setStatus(
-          `Peer Connection: ${state}`
+          `Peer: ${peer.connectionState}`
         );
       };
-
-    const handleOffer = async ({
-      offer,
-      senderId,
-    }: {
-      offer: RTCSessionDescriptionInit;
-      senderId: string;
-    }) => {
-      if (senderId === socket.id) {
-        return;
-      }
-
-      console.log(
-        "Offer received in frontend"
-      );
-
-      setStatus(
-        "Incoming connection request..."
-      );
-
-      await createAnswer(
-        offer,
-        senderId
-      );
-    };
-
-    const handleAnswer = async ({
-      answer,
-    }: {
-      answer: RTCSessionDescriptionInit;
-    }) => {
-      console.log(
-        "RAW ANSWER EVENT RECEIVED"
-      );
-
-      setStatus(
-        "Answer received. Establishing connection..."
-      );
-
-      await p2pClient.handleAnswer(
-        answer
-      );
-    };
-
-    const handleIceCandidate =
-      async ({
-        candidate,
-        senderId,
-      }: {
-        candidate: RTCIceCandidateInit;
-        senderId: string;
-      }) => {
-        if (senderId === socket.id) {
-          return;
-        }
-
-        await p2pClient.addIceCandidate(
-          candidate
-        );
-      };
-
-    socket.removeAllListeners(
-      "offer"
-    );
-
-    socket.removeAllListeners(
-      "answer"
-    );
-
-    socket.removeAllListeners(
-      "ice-candidate"
-    );
-
-    socket.on("offer", handleOffer);
-
-    socket.on("answer", handleAnswer);
-
-    socket.on(
-      "ice-candidate",
-      handleIceCandidate
-    );
 
     socket.on(
       "user-joined",
-      (id: string) => {
-        console.log(
-          "User joined:",
-          id
+      () => {
+        setStatus(
+          "Peer joined room"
         );
+      }
+    );
+
+    socket.on(
+      "offer",
+      async ({
+        offer,
+        senderId,
+      }) => {
+        if (
+          senderId === socket.id
+        )
+          return;
 
         setStatus(
-          `Peer joined room`
+          "Offer received"
+        );
+
+        await createAnswer(
+          offer,
+          senderId
+        );
+      }
+    );
+
+    socket.on(
+      "answer",
+      async ({ answer }) => {
+        setStatus(
+          "Answer received"
+        );
+
+        await p2pClient.handleAnswer(
+          answer
+        );
+      }
+    );
+
+    socket.on(
+      "ice-candidate",
+      async ({
+        candidate,
+        senderId,
+      }) => {
+        if (
+          senderId === socket.id
+        )
+          return;
+
+        await p2pClient.addIceCandidate(
+          candidate
         );
       }
     );
 
     return () => {
-      socket.off(
-        "offer",
-        handleOffer
-      );
-
-      socket.off(
-        "answer",
-        handleAnswer
-      );
-
-      socket.off(
-        "ice-candidate",
-        handleIceCandidate
-      );
-
-      socket.off("user-joined");
+      socket.removeAllListeners();
     };
   }, []);
 
   const joinRoom = () => {
-    if (!roomId) return;
-
     socket.emit("join-room", roomId);
 
     setJoinedRoom(true);
 
     setStatus(
-      `Joined room: ${roomId}`
+      `Joined room ${roomId}`
     );
   };
 
@@ -375,24 +286,18 @@ function App() {
   const sendFile = async (
     file: File
   ) => {
-    const chunkSize = 16 * 1024;
-
     setSendingFileName(file.name);
 
-    setSendingProgress(0);
+    const chunkSize = 16 * 1024;
 
-    setStatus(
-      `Sending file: ${file.name}`
-    );
+    const buffer =
+      await file.arrayBuffer();
 
     p2pClient.sendStructuredMessage({
       type: "file-meta",
       fileName: file.name,
       fileSize: file.size,
     });
-
-    const buffer =
-      await file.arrayBuffer();
 
     let offset = 0;
 
@@ -424,129 +329,51 @@ function App() {
     setStatus(
       "File sent successfully"
     );
-
-    setTimeout(() => {
-      setSendingProgress(0);
-    }, 2000);
   };
 
   return (
-    <div style={{ padding: "2rem" }}>
-      <h1>WebRTC File Transfer</h1>
+    <div className="app-container">
+      <h1 className="title">
+        WebRTC File Transfer
+      </h1>
 
-      <h3>Status: {status}</h3>
+      <StatusBar status={status} />
 
-      <input
-        type="text"
-        placeholder="Room ID"
-        value={roomId}
-        onChange={(e) =>
-          setRoomId(e.target.value)
+      <RoomControls
+        roomId={roomId}
+        setRoomId={setRoomId}
+        joinRoom={joinRoom}
+        joinedRoom={joinedRoom}
+        createOffer={createOffer}
+        hasCreatedOffer={
+          hasCreatedOffer
         }
       />
 
-      <button onClick={joinRoom}>
-        {joinedRoom
-          ? "Room Joined"
-          : "Join Room"}
-      </button>
-
-      <hr />
-
-      <input
-        type="text"
-        placeholder="Message"
-        value={message}
-        onChange={(e) =>
-          setMessage(e.target.value)
+      <TransferPanel
+        sendFile={sendFile}
+        sendingProgress={
+          sendingProgress
+        }
+        receivingProgress={
+          receivingProgress
+        }
+        sendingFileName={
+          sendingFileName
+        }
+        receivingFileName={
+          receivingFileName
         }
       />
 
-      <button onClick={createOffer}>
-        {hasCreatedOffer
-          ? "Offer Created"
-          : "Create Offer"}
-      </button>
-
-      <button onClick={sendMessage}>
-        Send
-      </button>
-
-      <br />
-      <br />
-
-      <input
-        type="file"
-        onChange={(e) => {
-          const file =
-            e.target.files?.[0];
-
-          if (file) {
-            sendFile(file);
-          }
-        }}
+      <ChatBox
+        message={message}
+        setMessage={setMessage}
+        sendMessage={sendMessage}
+        messages={messages}
       />
-
-      <div style={{ marginTop: "20px" }}>
-        <h3>Transfer Status</h3>
-
-        {sendingProgress > 0 && (
-          <div>
-            <p>
-              Sending:
-              {" "}
-              {sendingFileName}
-            </p>
-
-            <progress
-              value={sendingProgress}
-              max="100"
-            />
-
-            <p>
-              {sendingProgress.toFixed(
-                1
-              )}
-              %
-            </p>
-          </div>
-        )}
-
-        {receivingProgress > 0 && (
-          <div>
-            <p>
-              Receiving:
-              {" "}
-              {receivingFileName}
-            </p>
-
-            <progress
-              value={receivingProgress}
-              max="100"
-            />
-
-            <p>
-              {receivingProgress.toFixed(
-                1
-              )}
-              %
-            </p>
-          </div>
-        )}
-      </div>
-
-      <div>
-        <h3>Messages</h3>
-
-        {messages.map(
-          (msg, index) => (
-            <p key={index}>{msg}</p>
-          )
-        )}
-      </div>
     </div>
   );
 }
 
 export default App;
-
