@@ -12,7 +12,12 @@ import { p2pClient } from "./webrtc/P2PClient";
 function App() {
   const isOffererRef = useRef(false);
 
-  const [roomId, setRoomId] = useState("");
+  const receivedChunks = useRef<
+    ArrayBuffer[]
+  >([]);
+
+  const [roomId, setRoomId] =
+    useState("");
 
   const [message, setMessage] =
     useState("");
@@ -44,23 +49,22 @@ function App() {
     });
   };
 
+  const createAnswer = async (
+    offer: RTCSessionDescriptionInit,
+    targetId: string
+  ) => {
+    const answer =
+      await p2pClient.createAnswer(
+        offer
+      );
 
-const createAnswer = async (
-  offer: RTCSessionDescriptionInit,
-  targetId: string
-) => {
-  const answer =
-    await p2pClient.createAnswer(
-      offer
-    );
+    if (!answer) return;
 
-  if (!answer) return;
-
-  socket.emit("answer", {
-    answer,
-    targetId,
-  });
-};
+    socket.emit("answer", {
+      answer,
+      targetId,
+    });
+  };
 
   p2pClient.onIceCandidate = (
     candidate
@@ -73,139 +77,177 @@ const createAnswer = async (
   };
 
   p2pClient.onMessage = (
-    message
+    data
   ) => {
-    setMessages((prev) => [
-      ...prev,
-      `Peer: ${message}`,
-    ]);
-  };
-
-
-useEffect(() => {
-  const handleOffer = async ({
-    offer,
-    senderId,
-  }: {
-    offer: RTCSessionDescriptionInit;
-    senderId: string;
-  }) => {
-    if (senderId === socket.id) {
+    if (data instanceof ArrayBuffer) {
       console.log(
-        "Ignoring own offer"
+        "Received binary chunk:",
+        data.byteLength
+      );
+
+      receivedChunks.current.push(
+        data
       );
 
       return;
     }
 
-    console.log(
-      "Offer received in frontend"
-    );
-
-    await createAnswer(offer,senderId);
-  };
-
-  const handleAnswer = async ({
-    answer,
-    senderId,
-  }: {
-    answer: RTCSessionDescriptionInit;
-    senderId: string;
-  }) => {
-    if (senderId === socket.id) {
-      console.log(
-        "Ignoring own answer"
-      );
-
-      return;
+    if (data.type === "text") {
+      setMessages((prev) => [
+        ...prev,
+        `Peer: ${data.message}`,
+      ]);
     }
 
-    console.log(
-      "RAW ANSWER EVENT RECEIVED"
-    );
+    if (data.type === "file-meta") {
+      console.log(
+        "Receiving file:",
+        data.fileName
+      );
 
-    console.log(
-      "Answer received in frontend"
-    );
+      receivedChunks.current = [];
+    }
 
-    await p2pClient.handleAnswer(
-      answer
-    );
+    if (
+      data.type === "file-complete"
+    ) {
+      console.log(
+        "File transfer complete"
+      );
+
+      const blob = new Blob(
+        receivedChunks.current
+      );
+
+      const url =
+        URL.createObjectURL(blob);
+
+      const a =
+        document.createElement("a");
+
+      a.href = url;
+
+      a.download = "received-file";
+
+      a.click();
+    }
   };
 
-  const handleIceCandidate =
-    async ({
-      candidate,
+  useEffect(() => {
+    const handleOffer = async ({
+      offer,
       senderId,
     }: {
-      candidate: RTCIceCandidateInit;
+      offer: RTCSessionDescriptionInit;
       senderId: string;
     }) => {
       if (senderId === socket.id) {
+        console.log(
+          "Ignoring own offer"
+        );
+
         return;
       }
 
       console.log(
-        "ICE Candidate received in frontend"
+        "Offer received in frontend"
       );
 
-      await p2pClient.addIceCandidate(
-        candidate
+      await createAnswer(
+        offer,
+        senderId
       );
     };
 
-  socket.removeAllListeners(
-    "offer"
-  );
-
-  socket.removeAllListeners(
-    "answer"
-  );
-
-  socket.removeAllListeners(
-    "ice-candidate"
-  );
-
-  socket.on("offer", handleOffer);
-
-  socket.on("answer", handleAnswer);
-
-  socket.on(
-    "ice-candidate",
-    handleIceCandidate
-  );
-
-  socket.on(
-    "user-joined",
-    (id: string) => {
+    const handleAnswer = async ({
+      answer,
+    }: {
+      answer: RTCSessionDescriptionInit;
+    }) => {
       console.log(
-        "User joined:",
-        id
+        "RAW ANSWER EVENT RECEIVED"
       );
-    }
-  );
 
-  return () => {
-    socket.off(
-      "offer",
-      handleOffer
+      console.log(
+        "Answer received in frontend"
+      );
+
+      await p2pClient.handleAnswer(
+        answer
+      );
+    };
+
+    const handleIceCandidate =
+      async ({
+        candidate,
+        senderId,
+      }: {
+        candidate: RTCIceCandidateInit;
+        senderId: string;
+      }) => {
+        if (senderId === socket.id) {
+          return;
+        }
+
+        console.log(
+          "ICE Candidate received in frontend"
+        );
+
+        await p2pClient.addIceCandidate(
+          candidate
+        );
+      };
+
+    socket.removeAllListeners(
+      "offer"
     );
 
-    socket.off(
-      "answer",
-      handleAnswer
+    socket.removeAllListeners(
+      "answer"
     );
 
-    socket.off(
+    socket.removeAllListeners(
+      "ice-candidate"
+    );
+
+    socket.on("offer", handleOffer);
+
+    socket.on("answer", handleAnswer);
+
+    socket.on(
       "ice-candidate",
       handleIceCandidate
     );
 
-    socket.off("user-joined");
-  };
-}, []);
+    socket.on(
+      "user-joined",
+      (id: string) => {
+        console.log(
+          "User joined:",
+          id
+        );
+      }
+    );
 
+    return () => {
+      socket.off(
+        "offer",
+        handleOffer
+      );
 
+      socket.off(
+        "answer",
+        handleAnswer
+      );
+
+      socket.off(
+        "ice-candidate",
+        handleIceCandidate
+      );
+
+      socket.off("user-joined");
+    };
+  }, []);
 
   const joinRoom = () => {
     if (!roomId) return;
@@ -216,7 +258,10 @@ useEffect(() => {
   const sendMessage = () => {
     if (!message) return;
 
-    p2pClient.sendMessage(message);
+    p2pClient.sendStructuredMessage({
+      type: "text",
+      message,
+    });
 
     setMessages((prev) => [
       ...prev,
@@ -224,6 +269,42 @@ useEffect(() => {
     ]);
 
     setMessage("");
+  };
+
+  const sendFile = async (
+    file: File
+  ) => {
+    const chunkSize = 16 * 1024;
+
+    p2pClient.sendStructuredMessage({
+      type: "file-meta",
+      fileName: file.name,
+      fileSize: file.size,
+    });
+
+    const buffer =
+      await file.arrayBuffer();
+
+    let offset = 0;
+
+    while (offset < buffer.byteLength) {
+      const chunk = buffer.slice(
+        offset,
+        offset + chunkSize
+      );
+
+      p2pClient.sendBinaryChunk(chunk);
+
+      offset += chunkSize;
+    }
+
+    p2pClient.sendStructuredMessage({
+      type: "file-complete",
+    });
+
+    console.log(
+      "File transfer completed"
+    );
   };
 
   return (
@@ -261,6 +342,21 @@ useEffect(() => {
       <button onClick={sendMessage}>
         Send
       </button>
+
+      <br />
+      <br />
+
+      <input
+        type="file"
+        onChange={(e) => {
+          const file =
+            e.target.files?.[0];
+
+          if (file) {
+            sendFile(file);
+          }
+        }}
+      />
 
       <div>
         <h3>Messages</h3>

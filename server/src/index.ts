@@ -16,11 +16,6 @@ const io = new Server(server, {
   },
 });
 
-const rooms: Record<
-  string,
-  string[]
-> = {};
-
 io.on("connection", (socket) => {
   console.log("User Connected:", socket.id);
 
@@ -32,16 +27,6 @@ io.on("connection", (socket) => {
 
     socket.join(roomId);
 
-    if (!rooms[roomId]) {
-      rooms[roomId] = [];
-    }
-
-    if (
-      !rooms[roomId].includes(socket.id)
-    ) {
-      rooms[roomId].push(socket.id);
-    }
-
     console.log(
       `${socket.id} joined ${roomId}`
     );
@@ -51,32 +36,46 @@ io.on("connection", (socket) => {
       .emit("user-joined", socket.id);
   });
 
-socket.on( "offer", ({ roomId, offer, senderId, }) => { console.log("Offer received"); socket.to(roomId).emit( "offer", { offer, senderId, } ); } );
+  socket.on(
+    "offer",
+    ({ roomId, offer, senderId }) => {
+      console.log("Offer received");
 
+      socket.to(roomId).emit(
+        "offer",
+        {
+          offer,
+          senderId,
+        }
+      );
+    }
+  );
 
-socket.on(
-  "answer",
-  ({
-    answer,
-    targetId,
-  }) => {
-    console.log(
-      "Answer received"
-    );
+  socket.on(
+    "answer",
+    ({
+      answer,
+      targetId,
+    }: {
+      answer: RTCSessionDescriptionInit;
+      targetId: string;
+    }) => {
+      console.log(
+        "Answer received"
+      );
 
-    io.to(targetId).emit(
-      "answer",
-      {
-        answer,
-      }
-    );
+      io.to(targetId).emit(
+        "answer",
+        {
+          answer,
+        }
+      );
 
-    console.log(
-      "Answer forwarded directly"
-    );
-  }
-);
-
+      console.log(
+        "Answer forwarded directly"
+      );
+    }
+  );
 
   socket.on(
     "ice-candidate",
@@ -89,20 +88,7 @@ socket.on(
         "ICE Candidate received"
       );
 
-      const targetPeer =
-        rooms[roomId]?.find(
-          (id) => id !== senderId
-        );
-
-      if (!targetPeer) {
-        console.log(
-          "No target peer found for ICE"
-        );
-
-        return;
-      }
-
-      io.to(targetPeer).emit(
+      socket.to(roomId).emit(
         "ice-candidate",
         {
           candidate,
@@ -117,14 +103,6 @@ socket.on(
       "Disconnected:",
       socket.id
     );
-
-    for (const roomId in rooms) {
-      rooms[roomId] = rooms[
-        roomId
-      ].filter(
-        (id) => id !== socket.id
-      );
-    }
   });
 });
 

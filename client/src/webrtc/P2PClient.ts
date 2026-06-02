@@ -1,4 +1,18 @@
 
+type DataMessage =
+  | {
+      type: "text";
+      message: string;
+    }
+  | {
+      type: "file-meta";
+      fileName: string;
+      fileSize: number;
+    }
+  | {
+      type: "file-complete";
+    };
+
 class P2PClient {
   private peer: RTCPeerConnection;
 
@@ -12,7 +26,7 @@ class P2PClient {
   ) => void;
 
   public onMessage?: (
-    message: string
+    message: DataMessage | ArrayBuffer
   ) => void;
 
   constructor() {
@@ -82,12 +96,23 @@ class P2PClient {
     };
 
     channel.onmessage = (event) => {
-      console.log(
-        "P2P Message:",
-        event.data
-      );
+      if (typeof event.data === "string") {
+        const parsed =
+          JSON.parse(event.data);
 
-      this.onMessage?.(event.data);
+        console.log(
+          "Structured Message:",
+          parsed
+        );
+
+        this.onMessage?.(parsed);
+      } else {
+        console.log(
+          "Binary Chunk Received"
+        );
+
+        this.onMessage?.(event.data);
+      }
     };
   }
 
@@ -102,6 +127,35 @@ class P2PClient {
     );
 
     this.setupDataChannel(channel);
+  }
+
+  public sendStructuredMessage(
+    message: DataMessage
+  ) {
+    if (
+      this.dataChannel?.readyState ===
+      "open"
+    ) {
+      this.dataChannel.send(
+        JSON.stringify(message)
+      );
+    }
+  }
+
+  public sendBinaryChunk(
+    chunk: ArrayBuffer
+  ) {
+    if (
+      this.dataChannel?.readyState ===
+      "open"
+    ) {
+      this.dataChannel.send(chunk);
+
+      console.log(
+        "Binary Chunk Sent:",
+        chunk.byteLength
+      );
+    }
   }
 
   public sendMessage(message: string) {
